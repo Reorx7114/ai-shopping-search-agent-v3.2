@@ -20,14 +20,19 @@ function joinOrFallback(items: string[] | undefined, fallback = "無"): string {
 export default function Home() {
   const [intentMode, setIntentMode] = useState<IntentMode>("我不確定");
   const [wanted, setWanted] = useState("");
-  const [unwanted, setUnwanted] = useState("");
   const [result, setResult] = useState<SearchApiResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [showDebug, setShowDebug] = useState<boolean>(false);
   const [visibleCount, setVisibleCount] = useState(4);
+  const [loadingMessage, setLoadingMessage] = useState<string>("");
+
+  const setBusy = (message: string) => {
+    setLoadingMessage(message);
+    setLoading(true);
+  };
 
   const runSearch = async () => {
-    setLoading(true);
+    setBusy("正在幫你找商品...");
     try {
       const response = await fetch("/api/search", {
         method: "POST",
@@ -35,9 +40,7 @@ export default function Home() {
         body: JSON.stringify({
           intentMode,
           wanted,
-          unwanted,
-          query: wanted,
-          negativeInput: unwanted
+          query: wanted
         })
       });
       const data = (await response.json()) as SearchApiResponse;
@@ -46,11 +49,12 @@ export default function Home() {
       setShowDebug(false);
     } finally {
       setLoading(false);
+      setLoadingMessage("");
     }
   };
 
-  const refineLikeThis = async (candidate: Candidate, refinementType: "similar" | "cheaper" | "premium" | "no-article" | "marketplace" | "where-to-buy" | "small-space" = "similar") => {
-    setLoading(true);
+  const refineLikeThis = async (candidate: Candidate) => {
+    setBusy("正在重新縮小範圍...");
     try {
       const response = await fetch("/api/search", {
         method: "POST",
@@ -58,7 +62,7 @@ export default function Home() {
         body: JSON.stringify({
           query: wanted,
           intentMode,
-          negativeInput: unwanted,
+          wanted,
           selectedCandidate: {
             title: candidate.title,
             source: candidate.source,
@@ -73,6 +77,17 @@ export default function Home() {
       setShowDebug(false);
     } finally {
       setLoading(false);
+      setLoadingMessage("");
+    }
+  };
+
+  const reshuffle = async () => {
+    setBusy("正在換一批結果...");
+    try {
+      await runSearch();
+    } finally {
+      setLoading(false);
+      setLoadingMessage("");
     }
   };
 
@@ -87,7 +102,8 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-5xl p-6 space-y-6">
-      <h1 className="text-2xl font-semibold">Conversational Semantic Search MVP</h1>
+      <h1 className="text-2xl font-semibold">AI Shopping Search Agent</h1>
+      <p className="text-sm text-slate-600">幫你縮小選擇，快速找到更像你要買的商品。</p>
       <section className="bg-white rounded-lg border p-4 space-y-3">
         <div className="flex gap-2 flex-wrap">
           {INTENT_MODES.map((mode) => (
@@ -97,7 +113,6 @@ export default function Home() {
           ))}
         </div>
         <textarea className="w-full border rounded p-2" placeholder="你想找什麼？" value={wanted} onChange={(e) => setWanted(e.target.value)} />
-        <textarea className="w-full border rounded p-2" placeholder="你不想要什麼？例如 家樂福, carrefour" value={unwanted} onChange={(e) => setUnwanted(e.target.value)} />
         <button type="button" className="px-4 py-2 bg-slate-900 text-white rounded" onClick={runSearch} disabled={loading || !wanted.trim()}>
           {loading ? "搜尋中..." : "開始搜尋"}
         </button>
@@ -105,6 +120,9 @@ export default function Home() {
 
       {result && (
         <section className="space-y-4">
+          {loading ? (
+            <div className="bg-slate-50 border rounded-lg p-3 text-sm text-slate-600">{loadingMessage || "載入中..."}</div>
+          ) : null}
           {result.blocked ? (
             <article className="bg-white border rounded-lg p-4 space-y-2">
               <h2 className="text-base font-semibold">安全提示</h2>
@@ -150,21 +168,16 @@ export default function Home() {
                   </div>
                   <div className="flex-1 space-y-1">
                     <h2 className="font-medium text-sm line-clamp-2">{candidate.title}</h2>
-                    <p className="text-sm font-semibold text-emerald-700">{candidate.priceText ?? "價格未提供"}</p>
+                    {candidate.priceText ? <p className="text-sm font-semibold text-emerald-700">{candidate.priceText}</p> : null}
                     <p className="text-xs text-slate-500">{candidate.domain || candidate.source}</p>
-                    <p className="text-xs text-slate-600">{candidate.fitReason ?? "符合你的語意需求。"}</p>
+                    {candidate.fitReason ? <p className="text-xs text-slate-600">{candidate.fitReason}</p> : null}
                     <div className="pt-1">
                       <a href={candidate.link} target="_blank" className="inline-flex px-3 py-1.5 text-xs rounded bg-slate-900 text-white" rel="noreferrer">
                         查看商品
                       </a>
                     </div>
                     <div className="flex flex-wrap gap-1 pt-1">
-                      <button type="button" className="text-xs underline" onClick={() => refineLikeThis(candidate, "similar")}>比較像這個</button>
-                      {refinementChips.map((chip) => (
-                        <button key={`${candidate.id}-${chip.type}`} type="button" className="text-xs px-2 py-0.5 rounded-full border" onClick={() => refineLikeThis(candidate, chip.type)}>
-                          {chip.label}
-                        </button>
-                      ))}
+                      <button type="button" className="text-xs underline disabled:opacity-50" onClick={() => refineLikeThis(candidate)} disabled={loading}>比較像這個</button>
                     </div>
                   </div>
                 </article>
@@ -172,13 +185,17 @@ export default function Home() {
             </div>
           )}
           {!result.blocked && result.candidates.length > visibleCount ? (
-            <button type="button" className="text-sm underline" onClick={() => setVisibleCount((n) => Math.min(6, n + 2))}>
+            <button type="button" className="text-sm underline disabled:opacity-50" onClick={() => setVisibleCount((n) => Math.min(6, n + 2))} disabled={loading}>
               顯示更多（最多 6 筆）
             </button>
           ) : null}
-          <button type="button" className="text-sm underline" onClick={() => setResult(null)}>
-            這些都不像
-          </button>
+          {!result.blocked && result.candidates.length > 0 ? (
+            <div className="flex flex-wrap gap-3 text-sm">
+              <button type="button" className="underline disabled:opacity-50" onClick={() => setResult(null)} disabled={loading}>這些都不像</button>
+              <button type="button" className="underline disabled:opacity-50" onClick={reshuffle} disabled={loading || !wanted.trim()}>換一批</button>
+              <button type="button" className="underline disabled:opacity-50" onClick={runSearch} disabled={loading || !wanted.trim()}>重新搜尋</button>
+            </div>
+          ) : null}
         </section>
       )}
     </main>
