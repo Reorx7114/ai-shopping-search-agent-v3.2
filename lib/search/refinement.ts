@@ -1,4 +1,4 @@
-import type { ParsedIntent, RefinementType, SelectedCandidatePayload } from "./types";
+import type { NarrowingAnswer, ParsedIntent, RefinementType, SelectedCandidatePayload } from "./types";
 
 const REFINEMENT_HINTS: Record<RefinementType, string> = {
   similar: "similar alternative model",
@@ -18,4 +18,9 @@ export function buildRefinedQuery(parsed: ParsedIntent, selectedCandidate?: Sele
   const base = `${baseRaw} ${hint}`.trim();
   const negatives = parsed.negativeTerms.map((term) => `-${term}`).join(" ");
   return `${base} ${negatives}`.trim();
+}
+
+export function mapNarrowingToRefinement(answer?: NarrowingAnswer): RefinementType | undefined {
+  if (!answer) return undefined;
+  return answer;
 }

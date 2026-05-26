@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { Candidate, IntentMode, SearchApiResponse } from "@/lib/search/types";
+import type { Candidate, IntentMode, NarrowingAnswer, SearchApiResponse } from "@/lib/search/types";
 import { INTENT_MODES } from "@/lib/search/types";
 
 function CandidateImage({ src, alt }: { src: string; alt: string }) {
@@ -25,6 +25,7 @@ export default function Home() {
   const [showDebug, setShowDebug] = useState<boolean>(false);
   const [visibleCount, setVisibleCount] = useState(4);
   const [loadingMessage, setLoadingMessage] = useState<string>("");
+  const [showNarrowing, setShowNarrowing] = useState(false);
 
   const setBusy = (message: string) => {
     setLoadingMessage(message);
@@ -46,6 +47,7 @@ export default function Home() {
       const data = (await response.json()) as SearchApiResponse;
       setResult(data);
       setVisibleCount(4);
+      setShowNarrowing(false);
       setShowDebug(false);
     } finally {
       setLoading(false);
@@ -85,6 +87,30 @@ export default function Home() {
     setBusy("正在換一批結果...");
     try {
       await runSearch();
+    } finally {
+      setLoading(false);
+      setLoadingMessage("");
+    }
+  };
+
+  const applyNarrowing = async (answer: NarrowingAnswer) => {
+    setBusy("正在依你的偏好縮小選擇...");
+    try {
+      const response = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          intentMode,
+          wanted,
+          query: wanted,
+          narrowingAnswer: answer
+        })
+      });
+      const data = (await response.json()) as SearchApiResponse;
+      setResult(data);
+      setVisibleCount(4);
+      setShowNarrowing(false);
+      setShowDebug(false);
     } finally {
       setLoading(false);
       setLoadingMessage("");
@@ -191,10 +217,21 @@ export default function Home() {
           ) : null}
           {!result.blocked && result.candidates.length > 0 ? (
             <div className="flex flex-wrap gap-3 text-sm">
-              <button type="button" className="underline disabled:opacity-50" onClick={() => setResult(null)} disabled={loading}>這些都不像</button>
+              <button type="button" className="underline disabled:opacity-50" onClick={() => setShowNarrowing(true)} disabled={loading}>這些都不像</button>
               <button type="button" className="underline disabled:opacity-50" onClick={reshuffle} disabled={loading || !wanted.trim()}>換一批</button>
               <button type="button" className="underline disabled:opacity-50" onClick={runSearch} disabled={loading || !wanted.trim()}>重新搜尋</button>
             </div>
+          ) : null}
+          {showNarrowing ? (
+            <article className="bg-white border rounded-lg p-4 space-y-3">
+              <h3 className="text-sm font-medium">那你現在最想先縮小哪個方向？</h3>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className="px-3 py-1.5 border rounded text-sm disabled:opacity-50" onClick={() => applyNarrowing("cheaper")} disabled={loading}>先看更便宜</button>
+                <button type="button" className="px-3 py-1.5 border rounded text-sm disabled:opacity-50" onClick={() => applyNarrowing("premium")} disabled={loading}>先看更高級</button>
+                <button type="button" className="px-3 py-1.5 border rounded text-sm disabled:opacity-50" onClick={() => applyNarrowing("marketplace")} disabled={loading}>先看商城商品頁</button>
+                <button type="button" className="px-3 py-1.5 border rounded text-sm disabled:opacity-50" onClick={() => applyNarrowing("no-article")} disabled={loading}>先排除文章內容</button>
+              </div>
+            </article>
           ) : null}
         </section>
       )}

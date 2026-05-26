@@ -30,6 +30,7 @@ export interface Candidate {
 }
 
 export type RefinementType = "similar" | "cheaper" | "premium" | "no-article" | "marketplace" | "where-to-buy" | "small-space";
+export type NarrowingAnswer = "cheaper" | "premium" | "marketplace" | "no-article";
 
 export interface SelectedCandidatePayload {
   title: string;
@@ -45,6 +46,7 @@ export interface SearchRequest {
   negativeInput?: string;
   selectedCandidate?: SelectedCandidatePayload;
   refinementType?: RefinementType;
+  narrowingAnswer?: NarrowingAnswer;
   likedCandidateId?: string;
   restartRefinement?: boolean;
   mockMode?: boolean;
