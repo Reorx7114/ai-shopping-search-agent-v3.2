@@ -21,7 +21,15 @@ export interface Candidate {
   source: string;
   link: string;
   snippet?: string;
+  score?: number;
+  matchedClues?: string[];
+  matchedNegativeTerms?: string[];
+  priceText?: string;
+  domain?: string;
+  fitReason?: string;
 }
+
+export type RefinementType = "similar" | "cheaper" | "premium" | "no-article" | "marketplace" | "where-to-buy" | "small-space";
 
 export interface SelectedCandidatePayload {
   title: string;
@@ -36,7 +44,7 @@ export interface SearchRequest {
   query?: string;
   negativeInput?: string;
   selectedCandidate?: SelectedCandidatePayload;
-  refinementType?: "similar";
+  refinementType?: RefinementType;
   likedCandidateId?: string;
   restartRefinement?: boolean;
   mockMode?: boolean;
@@ -52,6 +60,8 @@ export interface SearchDebug {
   intentMode: IntentMode;
   generatedQueries: string[];
   errorMessage?: string;
+  totalCandidates?: number;
+  dedupedCandidates?: number;
 }
 
 

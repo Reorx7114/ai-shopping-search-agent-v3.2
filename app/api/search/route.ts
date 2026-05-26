@@ -30,7 +30,8 @@ export async function POST(request: Request) {
     const baseQueries = parseResult.parsedIntent.searchQueries;
     const refined = buildRefinedQuery(
       parseResult.parsedIntent,
-      body.refinementType === "similar" ? body.selectedCandidate : undefined
+      body.selectedCandidate,
+      body.refinementType
     );
     const generatedQueries = Array.from(new Set([refined, ...baseQueries])).filter(Boolean);
 
@@ -45,6 +46,7 @@ export async function POST(request: Request) {
     }
 
     let candidates: Candidate[] = [];
+    let totalCandidates = 0;
     let searchSource: SearchSource = "none";
     let errorMessage = parseResult.errorMessage;
 
@@ -53,11 +55,12 @@ export async function POST(request: Request) {
       if (serp.errorMessage) {
         errorMessage = errorMessage ? `${errorMessage}; ${serp.errorMessage}` : serp.errorMessage;
       } else {
-        candidates = rankCandidates(serp.candidates, parseResult.parsedIntent);
+        totalCandidates = serp.candidates.length;
+        candidates = rankCandidates(serp.candidates, parseResult.parsedIntent).slice(0, 6);
         searchSource = "serpapi";
       }
     } else if (!apiKeyStatus.openaiConfigured && body.mockMode !== false) {
-      candidates = rankCandidates(mockCandidates, parseResult.parsedIntent);
+      candidates = rankCandidates(mockCandidates, parseResult.parsedIntent).slice(0, 6);
       searchSource = "mock";
       errorMessage = errorMessage ?? "Both OPENAI_API_KEY and SERPAPI_API_KEY are missing; using mock data";
     } else {
@@ -73,7 +76,9 @@ export async function POST(request: Request) {
         searchSource,
         intentMode: parseResult.parsedIntent.intentMode,
         generatedQueries,
-        errorMessage
+        errorMessage,
+        totalCandidates,
+        dedupedCandidates: candidates.length
       }
     };
 
