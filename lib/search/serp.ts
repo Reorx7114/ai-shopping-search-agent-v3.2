@@ -6,6 +6,7 @@ interface SerpImageResult {
   title?: string;
   source?: string;
   link?: string;
+  price?: string;
 }
 
 export async function searchImages(queries: string[]): Promise<{ candidates: Candidate[]; errorMessage?: string }> {
@@ -36,10 +37,30 @@ export async function searchImages(queries: string[]): Promise<{ candidates: Can
         image: item.original ?? item.thumbnail ?? "",
         title: item.title ?? "Untitled",
         source: item.source ?? "Unknown",
-        link: item.link ?? ""
+        link: item.link ?? "",
+        priceText: item.price
       });
     }
   }
 
-  return { candidates: collected };
+  const deduped = dedupeCandidates(collected);
+  return { candidates: deduped };
+}
+
+function dedupeCandidates(candidates: Candidate[]): Candidate[] {
+  const seen = new Set<string>();
+  const deduped: Candidate[] = [];
+  for (const candidate of candidates) {
+    const normalizedLink = normalizeText(candidate.link);
+    const normalizedTitle = normalizeText(candidate.title);
+    const key = normalizedLink || `${normalizedTitle}|${normalizeText(candidate.source)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(candidate);
+  }
+  return deduped;
+}
+
+function normalizeText(input: string): string {
+  return input.toLowerCase().replace(/\s+/g, " ").trim();
 }

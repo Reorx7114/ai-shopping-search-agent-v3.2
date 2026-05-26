@@ -7,9 +7,9 @@ import { INTENT_MODES } from "@/lib/search/types";
 function CandidateImage({ src, alt }: { src: string; alt: string }) {
   const [failed, setFailed] = useState(false);
   if (failed || !src) {
-    return <div className="h-40 w-full bg-slate-200 text-xs flex items-center justify-center">No Image</div>;
+    return <div className="h-28 w-full bg-slate-200 text-xs flex items-center justify-center">No Image</div>;
   }
-  return <img src={src} alt={alt} className="h-40 w-full object-cover" onError={() => setFailed(true)} referrerPolicy="no-referrer" />;
+  return <img src={src} alt={alt} className="h-28 w-full object-cover rounded" onError={() => setFailed(true)} referrerPolicy="no-referrer" />;
 }
 
 function joinOrFallback(items: string[] | undefined, fallback = "無"): string {
@@ -24,6 +24,7 @@ export default function Home() {
   const [result, setResult] = useState<SearchApiResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [showDebug, setShowDebug] = useState<boolean>(false);
+  const [visibleCount, setVisibleCount] = useState(4);
 
   const runSearch = async () => {
     setLoading(true);
@@ -41,13 +42,14 @@ export default function Home() {
       });
       const data = (await response.json()) as SearchApiResponse;
       setResult(data);
+      setVisibleCount(4);
       setShowDebug(false);
     } finally {
       setLoading(false);
     }
   };
 
-  const refineLikeThis = async (candidate: Candidate) => {
+  const refineLikeThis = async (candidate: Candidate, refinementType: "similar" | "cheaper" | "premium" | "no-article" | "marketplace" | "where-to-buy" | "small-space" = "similar") => {
     setLoading(true);
     try {
       const response = await fetch("/api/search", {
@@ -62,16 +64,26 @@ export default function Home() {
             source: candidate.source,
             link: candidate.link
           },
-          refinementType: "similar"
+          refinementType
         })
       });
       const data = (await response.json()) as SearchApiResponse;
       setResult(data);
+      setVisibleCount(4);
       setShowDebug(false);
     } finally {
       setLoading(false);
     }
   };
+
+  const refinementChips = [
+    { label: "更便宜", type: "cheaper" as const },
+    { label: "更高級", type: "premium" as const },
+    { label: "不要文章", type: "no-article" as const },
+    { label: "找商城", type: "marketplace" as const },
+    { label: "哪裡買", type: "where-to-buy" as const },
+    { label: "更適合小空間", type: "small-space" as const }
+  ];
 
   return (
     <main className="mx-auto max-w-5xl p-6 space-y-6">
@@ -130,26 +142,40 @@ export default function Home() {
           )}
 
           {result.blocked || result.candidates.length === 0 ? null : (
-            <div className="grid md:grid-cols-3 gap-4">
-              {result.candidates.map((candidate) => (
-                <article key={candidate.id} className="bg-white border rounded overflow-hidden">
-                  <CandidateImage src={candidate.image} alt={candidate.title} />
-                  <div className="p-3 space-y-2">
-                    <h2 className="font-medium text-sm">{candidate.title}</h2>
-                    <p className="text-xs text-slate-500">{candidate.source}</p>
-                    <div className="flex gap-2 text-xs">
-                      <a href={candidate.link} target="_blank" className="underline" rel="noreferrer">
-                        查看連結
+            <div className="grid md:grid-cols-2 gap-3">
+              {result.candidates.slice(0, visibleCount).map((candidate) => (
+                <article key={candidate.id} className="bg-white border rounded-lg overflow-hidden p-2 flex gap-3">
+                  <div className="w-28 shrink-0">
+                    <CandidateImage src={candidate.image} alt={candidate.title} />
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <h2 className="font-medium text-sm line-clamp-2">{candidate.title}</h2>
+                    <p className="text-sm font-semibold text-emerald-700">{candidate.priceText ?? "價格未提供"}</p>
+                    <p className="text-xs text-slate-500">{candidate.domain || candidate.source}</p>
+                    <p className="text-xs text-slate-600">{candidate.fitReason ?? "符合你的語意需求。"}</p>
+                    <div className="pt-1">
+                      <a href={candidate.link} target="_blank" className="inline-flex px-3 py-1.5 text-xs rounded bg-slate-900 text-white" rel="noreferrer">
+                        查看商品
                       </a>
-                      <button type="button" className="underline" onClick={() => refineLikeThis(candidate)}>
-                        比較像這個
-                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1 pt-1">
+                      <button type="button" className="text-xs underline" onClick={() => refineLikeThis(candidate, "similar")}>比較像這個</button>
+                      {refinementChips.map((chip) => (
+                        <button key={`${candidate.id}-${chip.type}`} type="button" className="text-xs px-2 py-0.5 rounded-full border" onClick={() => refineLikeThis(candidate, chip.type)}>
+                          {chip.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </article>
               ))}
             </div>
           )}
+          {!result.blocked && result.candidates.length > visibleCount ? (
+            <button type="button" className="text-sm underline" onClick={() => setVisibleCount((n) => Math.min(6, n + 2))}>
+              顯示更多（最多 6 筆）
+            </button>
+          ) : null}
           <button type="button" className="text-sm underline" onClick={() => setResult(null)}>
             這些都不像
           </button>
