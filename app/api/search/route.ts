@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { mockCandidates } from "@/mockData";
 import { parseIntent } from "@/lib/search/intentParser";
 import { rankCandidates } from "@/lib/search/ranking";
-import { buildRefinedQuery } from "@/lib/search/refinement";
+import { buildRefinedQuery, mapNarrowingToRefinement } from "@/lib/search/refinement";
 import { searchImages } from "@/lib/search/serp";
 import { buildBlockedResponse, checkGeneratedQueriesSafety, checkParsedIntentSafety, checkSearchSafety } from "@/lib/search/safety";
 import type { Candidate, SearchApiResponse, SearchRequest, SearchResponse, SearchSource } from "@/lib/search/types";
@@ -27,14 +27,21 @@ export async function POST(request: Request) {
       unwanted: body.unwanted ?? body.negativeInput ?? ""
     });
 
-    const baseQueries = parseResult.parsedIntent.searchQueries;
+    const narrowedRefinementType = body.refinementType ?? mapNarrowingToRefinement(body.narrowingAnswer);
+    const narrowingNegatives = body.narrowingAnswer === "no-article" ? ["review", "reddit", "youtube", "blog", "news", "article"] : [];
+    const parsedIntent = {
+      ...parseResult.parsedIntent,
+      negativeTerms: Array.from(new Set([...parseResult.parsedIntent.negativeTerms, ...narrowingNegatives]))
+    };
+    const baseQueries = parsedIntent.searchQueries;
     const refined = buildRefinedQuery(
-      parseResult.parsedIntent,
-      body.refinementType === "similar" ? body.selectedCandidate : undefined
+      parsedIntent,
+      body.selectedCandidate,
+      narrowedRefinementType
     );
     const generatedQueries = Array.from(new Set([refined, ...baseQueries])).filter(Boolean);
 
-    const postParseSafety = checkParsedIntentSafety(parseResult.parsedIntent, generatedQueries);
+    const postParseSafety = checkParsedIntentSafety(parsedIntent, generatedQueries);
     if (postParseSafety.blocked) {
       return NextResponse.json(buildBlockedResponse(body.intentMode, "post-parse", postParseSafety.matchedTerm));
     }
@@ -45,6 +52,7 @@ export async function POST(request: Request) {
     }
 
     let candidates: Candidate[] = [];
+    let totalCandidates = 0;
     let searchSource: SearchSource = "none";
     let errorMessage = parseResult.errorMessage;
 
@@ -53,11 +61,12 @@ export async function POST(request: Request) {
       if (serp.errorMessage) {
         errorMessage = errorMessage ? `${errorMessage}; ${serp.errorMessage}` : serp.errorMessage;
       } else {
-        candidates = rankCandidates(serp.candidates, parseResult.parsedIntent);
+        totalCandidates = serp.candidates.length;
+        candidates = rankCandidates(serp.candidates, parsedIntent).slice(0, 6);
         searchSource = "serpapi";
       }
     } else if (!apiKeyStatus.openaiConfigured && body.mockMode !== false) {
-      candidates = rankCandidates(mockCandidates, parseResult.parsedIntent);
+      candidates = rankCandidates(mockCandidates, parsedIntent).slice(0, 6);
       searchSource = "mock";
       errorMessage = errorMessage ?? "Both OPENAI_API_KEY and SERPAPI_API_KEY are missing; using mock data";
     } else {
@@ -65,15 +74,17 @@ export async function POST(request: Request) {
     }
 
     const response: SearchResponse = {
-      parsedIntent: parseResult.parsedIntent,
+      parsedIntent,
       candidates,
       debug: {
         apiKeyStatus,
         parserSource: parseResult.parserSource,
         searchSource,
-        intentMode: parseResult.parsedIntent.intentMode,
+        intentMode: parsedIntent.intentMode,
         generatedQueries,
-        errorMessage
+        errorMessage,
+        totalCandidates,
+        dedupedCandidates: candidates.length
       }
     };
 
