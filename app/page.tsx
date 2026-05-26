@@ -68,7 +68,7 @@ export default function Home() {
             source: candidate.source,
             link: candidate.link
           },
-          refinementType: "similar"
+          refinementType
         })
       });
       const data = (await response.json()) as SearchApiResponse;
@@ -90,6 +90,15 @@ export default function Home() {
       setLoadingMessage("");
     }
   };
+
+  const refinementChips = [
+    { label: "更便宜", type: "cheaper" as const },
+    { label: "更高級", type: "premium" as const },
+    { label: "不要文章", type: "no-article" as const },
+    { label: "找商城", type: "marketplace" as const },
+    { label: "哪裡買", type: "where-to-buy" as const },
+    { label: "更適合小空間", type: "small-space" as const }
+  ];
 
   return (
     <main className="mx-auto max-w-5xl p-6 space-y-6">
